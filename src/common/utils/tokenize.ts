@@ -6,7 +6,7 @@ const STOP_WORDS = new Set([
   'under', 'again', 'further', 'once', 'here', 'there', 'all', 'any',
   'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such',
   'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very',
-  'can', 'will', 'just', 'should', 'now'
+  'can', 'will', 'just', 'should', 'now',"is", "are", "was", "were", "be", "been", "being", "that", "this", "these", "those"
 ]);
 
 type TokenizeOptions = {

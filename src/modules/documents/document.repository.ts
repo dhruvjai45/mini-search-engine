@@ -1,5 +1,8 @@
+import type { Pool, PoolClient } from 'pg';
 import { pool } from '../../config/postgres';
 import type { CreateDocumentInput, DocumentRecord } from './document.types';
+
+type QueryExecutor = Pool | PoolClient;
 
 type DocumentDbRow = {
   id: string;
@@ -80,9 +83,10 @@ export async function findDocumentByUrl(
 }
 
 export async function createDocument(
+  executor: QueryExecutor,
   data: CreateDocumentInput & { cleanContent: string; contentHash: string }
 ): Promise<DocumentRecord> {
-  const result = await pool.query<DocumentDbRow>(
+  const result = await executor.query<DocumentDbRow>(
     `
     INSERT INTO documents (
       title,
