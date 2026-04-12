@@ -3,6 +3,7 @@ import { generateSnippet } from '../../common/utils/snippet';
 import { tokenize } from '../../common/utils/tokenize';
 import { calculateTfIdf, calculateTitleBoost } from './tfidf';
 import { findSearchTermMatches, logSearchQuery } from './search.repository';
+import { spellcheckService } from '../spellcheck/spellcheck.service';
 import type {
   SearchRequest,
   SearchResponse,
@@ -25,7 +26,7 @@ export async function searchDocuments(
 ): Promise<SearchResponse> {
   const startedAt = Date.now();
 
-  const queryTerms = Array.from(
+  let queryTerms = Array.from(
     new Set(
       tokenize(input.q, {
         removeStopWords: true,
@@ -40,8 +41,35 @@ export async function searchDocuments(
     );
   }
 
-  const normalizedQuery = queryTerms.join(' ');
-  const matches = await findSearchTermMatches(queryTerms);
+  let normalizedQuery = queryTerms.join(' ');
+  let matches = await findSearchTermMatches(queryTerms);
+
+  let didYouMean: string | null = null;
+  let correctionApplied = false;
+
+  if (matches.length === 0) {
+    const correction = spellcheckService.suggestQuery(input.q);
+
+    if (correction.changed && correction.correctedQuery !== normalizedQuery) {
+      const correctedTerms = tokenize(correction.correctedQuery, {
+        removeStopWords: true,
+        minLength: 2
+      });
+
+      if (correctedTerms.length > 0) {
+        const correctedMatches = await findSearchTermMatches(correctedTerms);
+
+        didYouMean = correction.correctedQuery;
+
+        if (correctedMatches.length > 0) {
+          matches = correctedMatches;
+          queryTerms = correctedTerms;
+          normalizedQuery = correction.correctedQuery;
+          correctionApplied = true;
+        }
+      }
+    }
+  }
 
   const aggregated = new Map<string, AggregatedResult>();
 
@@ -115,6 +143,8 @@ export async function searchDocuments(
   return {
     query: input.q,
     normalizedQuery,
+    didYouMean,
+    correctionApplied,
     page: input.page,
     limit: input.limit,
     totalResults,

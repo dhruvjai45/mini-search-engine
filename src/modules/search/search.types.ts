@@ -18,6 +18,8 @@ export interface SearchResultItem {
 export interface SearchResponse {
   query: string;
   normalizedQuery: string;
+  didYouMean: string | null;
+  correctionApplied: boolean;
   page: number;
   limit: number;
   totalResults: number;

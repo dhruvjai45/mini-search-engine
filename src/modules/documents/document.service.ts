@@ -1,17 +1,20 @@
-import { pool} from '../../config/postgres';
+import { pool } from '../../config/postgres';
 import { ConflictError } from '../../common/errors/AppError';
 import { hashContent } from '../../common/utils/hashContent';
 import { normalizeText } from '../../common/utils/normalizeText';
 import { tokenize } from '../../common/utils/tokenize';
 import { buildTermPostings } from '../indexing/indexer.service';
 import { insertDocumentTerms } from '../indexing/indexer.repository';
-import { createDocument, findDocumentByContentHash, findDocumentByUrl} from './document.repository';
-import type { CreateDocumentInput, DocumentIngestResponse} from './document.types';
+import { createDocument, findDocumentByContentHash, findDocumentByUrl } from './document.repository';
+import type { CreateDocumentInput, DocumentIngestResponse } from './document.types';
+import { autocompleteService } from '../autocomplete/autocomplete.service';
+import { spellcheckService } from '../spellcheck/spellcheck.service';
 
 export async function ingestDocument(
   input: CreateDocumentInput
 ): Promise<DocumentIngestResponse> {
   const cleanContent = normalizeText(input.content);
+  const titleTokens = tokenize(normalizeText(input.title), { removeStopWords: true });
   const tokens = tokenize(cleanContent, { removeStopWords: true });
   const contentHash = hashContent(cleanContent);
 
@@ -46,6 +49,9 @@ export async function ingestDocument(
     await insertDocumentTerms(client, saved.id, postings);
 
     await client.query('COMMIT');
+    autocompleteService.addSuggestion(saved.title, 3);
+    spellcheckService.addTerms(titleTokens, 2);
+    spellcheckService.addTerms(tokens, 1);
 
     return {
       id: saved.id,
