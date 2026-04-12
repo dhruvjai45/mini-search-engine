@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { healthRouter } from './health.routes';
 import { documentRouter } from '../modules/documents/document.routes';
 import { indexRouter } from '../modules/indexing/index.routes';
+import { searchRouter } from '../modules/search/search.routes';
 
 export const apiRouter = Router();
 
@@ -15,3 +16,4 @@ apiRouter.get('/', (_req, res) => {
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/documents', documentRouter);
 apiRouter.use('/index', indexRouter);
+apiRouter.use('/search', searchRouter);
