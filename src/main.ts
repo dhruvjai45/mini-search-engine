@@ -1,20 +1,18 @@
 import { testDatabaseConnection } from './config/postgres';
-import express from 'express';
+import { logger } from './config/logger';
+import { startServer } from './server';
 
-const app = express();
+async function bootstrap() {
+  try {
+    logger.info('Starting application...');
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'OK' });
-});
+    await testDatabaseConnection();
 
-const PORT = 5000;
-
-async function start() {
-  await testDatabaseConnection();
-
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+    startServer();
+  } catch (error) {
+    logger.error('Failed to start application', error);
+    process.exit(1);
+  }
 }
 
-start();
+void bootstrap();
