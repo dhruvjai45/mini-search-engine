@@ -11,6 +11,8 @@ export type SearchMatchRow = {
   term_frequency: number;
   document_frequency: number;
   total_documents: number;
+  document_length: number;
+  average_document_length: number;
 };
 
 export async function findSearchTermMatches(
@@ -23,6 +25,17 @@ export async function findSearchTermMatches(
     WITH total_docs AS (
       SELECT COUNT(*)::int AS total_documents
       FROM documents
+    ),
+    doc_lengths AS (
+      SELECT
+        document_id,
+        SUM(term_frequency)::int AS document_length
+      FROM document_terms
+      GROUP BY document_id
+    ),
+    avg_length AS (
+      SELECT COALESCE(AVG(document_length), 0)::numeric AS average_document_length
+      FROM doc_lengths
     ),
     term_doc_freq AS (
       SELECT
@@ -42,13 +55,18 @@ export async function findSearchTermMatches(
       dt.term,
       dt.term_frequency,
       tdf.document_frequency,
-      td.total_documents
+      td.total_documents,
+      dl.document_length,
+      al.average_document_length
     FROM document_terms dt
     JOIN term_doc_freq tdf
       ON tdf.term = dt.term
     JOIN documents d
       ON d.id = dt.document_id
+    JOIN doc_lengths dl
+      ON dl.document_id = d.id
     CROSS JOIN total_docs td
+    CROSS JOIN avg_length al
     WHERE dt.term = ANY($1::text[])
     ORDER BY d.id ASC, dt.term ASC
     `,

@@ -1,7 +1,11 @@
 import { ValidationError } from '../../common/errors/AppError';
 import { generateSnippet } from '../../common/utils/snippet';
 import { tokenize } from '../../common/utils/tokenize';
-import { calculateTfIdf, calculateTitleBoost } from './tfidf';
+import {
+  calculateBm25,
+  calculatePhraseBoost,
+  calculateTitleBoost
+} from './bm25';
 import { findSearchTermMatches, logSearchQuery } from './search.repository';
 import { spellcheckService } from '../spellcheck/spellcheck.service';
 import type {
@@ -87,12 +91,15 @@ export async function searchDocuments(
         score: 0
       };
 
-    existing.score += calculateTfIdf(
-      row.term_frequency,
-      row.document_frequency,
-      row.total_documents
-    );
+    const bm25Score = calculateBm25({
+      termFrequency: row.term_frequency,
+      documentFrequency: row.document_frequency,
+      totalDocuments: row.total_documents,
+      documentLength: row.document_length,
+      averageDocumentLength: Number(row.average_document_length)
+    });
 
+    existing.score += bm25Score;
     existing.matchedTerms.add(row.term);
     aggregated.set(row.document_id, existing);
   }
@@ -105,7 +112,9 @@ export async function searchDocuments(
         normalizedQuery
       );
 
-      const finalScore = doc.score + titleBoost;
+      const phraseBoost = calculatePhraseBoost(doc.rawContent, normalizedQuery);
+
+      const finalScore = doc.score + titleBoost + phraseBoost;
 
       return {
         id: doc.id,
