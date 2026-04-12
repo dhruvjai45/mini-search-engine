@@ -1,0 +1,12 @@
+import { Router } from 'express';
+
+export const healthRouter = Router();
+
+healthRouter.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime_seconds: Math.floor(process.uptime())
+  });
+});
