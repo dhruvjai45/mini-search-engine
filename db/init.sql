@@ -48,3 +48,31 @@ CREATE TABLE IF NOT EXISTS crawl_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_crawl_jobs_status ON crawl_jobs(status);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    url TEXT UNIQUE,
+    raw_content TEXT NOT NULL,
+    clean_content TEXT NOT NULL,
+    content_hash TEXT NOT NULL UNIQUE,
+    source_type TEXT NOT NULL DEFAULT 'manual',
+    document_length INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS term_stats (
+    term TEXT PRIMARY KEY,
+    document_frequency INT NOT NULL DEFAULT 0,
+    total_term_frequency INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS corpus_stats (
+    id SMALLINT PRIMARY KEY CHECK (id = 1),
+    total_documents INT NOT NULL DEFAULT 0,
+    total_document_length BIGINT NOT NULL DEFAULT 0,
+    average_document_length NUMERIC(12,4) NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
