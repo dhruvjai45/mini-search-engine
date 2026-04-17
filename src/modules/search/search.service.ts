@@ -1,35 +1,26 @@
 import { ValidationError } from '../../common/errors/AppError';
 import { generateSnippet } from '../../common/utils/snippet';
 import { tokenize } from '../../common/utils/tokenize';
-import {
-  calculateBm25,
-  calculatePhraseBoost,
-  calculateTitleBoost
-} from './bm25';
-import { findSearchTermMatches, logSearchQuery } from './search.repository';
+import { CACHE_CONFIG, cacheKeys } from '../cache/cacheKeys';
+import { cacheService } from '../cache/cache.service';
 import { spellcheckService } from '../spellcheck/spellcheck.service';
+import {
+  findSearchTermMatches,
+  countTotalMatches,
+  logSearchQuery
+} from './search.repository';
 import type {
   SearchRequest,
   SearchResponse,
   SearchResultItem
 } from './search.types';
 
-type AggregatedResult = {
-  id: string;
-  title: string;
-  url: string | null;
-  sourceType: 'manual' | 'crawl';
-  rawContent: string;
-  createdAt: Date;
-  matchedTerms: Set<string>;
-  score: number;
-};
-
 export async function searchDocuments(
   input: SearchRequest
 ): Promise<SearchResponse> {
   const startedAt = Date.now();
 
+  // 🔹 Tokenize
   let queryTerms = Array.from(
     new Set(
       tokenize(input.q, {
@@ -46,13 +37,44 @@ export async function searchDocuments(
   }
 
   let normalizedQuery = queryTerms.join(' ');
-  let matches = await findSearchTermMatches(queryTerms);
+  const cacheKey = cacheKeys.search(normalizedQuery, input.page, input.limit);
+
+  // 🔹 Cache check
+  const cached = cacheService.get<Omit<SearchResponse, 'tookMs'>>(cacheKey);
+  if (cached) {
+    const tookMs = Date.now() - startedAt;
+
+    await logSearchQuery({
+      queryText: input.q,
+      normalizedQuery: cached.normalizedQuery,
+      resultCount: cached.totalResults,
+      latencyMs: tookMs
+    });
+
+    return {
+      ...cached,
+      tookMs,
+      cached: true
+    };
+  }
+
+  // 🔹 Strict match first
+const exactThreshold = queryTerms.length > 1 ? queryTerms.length : 1;
+let usedThreshold = exactThreshold;
+
+let matches = await findSearchTermMatches(
+  queryTerms,
+  exactThreshold,
+  input.page * input.limit,
+  normalizedQuery
+);
 
   let didYouMean: string | null = null;
   let correctionApplied = false;
 
+  // 🔹 SPELLCHECK FALLBACK
   if (matches.length === 0) {
-    const correction = spellcheckService.suggestQuery(input.q);
+    const correction = spellcheckService.suggestQuery(input.q, 5);
 
     if (correction.changed && correction.correctedQuery !== normalizedQuery) {
       const correctedTerms = tokenize(correction.correctedQuery, {
@@ -61,7 +83,15 @@ export async function searchDocuments(
       });
 
       if (correctedTerms.length > 0) {
-        const correctedMatches = await findSearchTermMatches(correctedTerms);
+        const correctedThreshold =
+          correctedTerms.length > 1 ? correctedTerms.length : 1;
+
+        const correctedMatches = await findSearchTermMatches(
+          correctedTerms,
+          correctedThreshold,
+          input.page * input.limit,
+          correction.correctedQuery
+        );
 
         didYouMean = correction.correctedQuery;
 
@@ -75,73 +105,59 @@ export async function searchDocuments(
     }
   }
 
-  const aggregated = new Map<string, AggregatedResult>();
+  // 🔥 🔥 🔥 CRITICAL FIX — PARTIAL MATCH FALLBACK (RECALL FIX)
+if (matches.length === 0 && queryTerms.length > 1) {
+  usedThreshold = 1;
 
-  for (const row of matches) {
-    const existing =
-      aggregated.get(row.document_id) ??
-      {
-        id: row.document_id,
-        title: row.title,
-        url: row.url,
-        sourceType: row.source_type,
-        rawContent: row.raw_content,
-        createdAt: row.created_at,
-        matchedTerms: new Set<string>(),
-        score: 0
-      };
+  matches = await findSearchTermMatches(
+    queryTerms,
+    1,
+    input.page * input.limit,
+    normalizedQuery
+  );
+}
 
-    const bm25Score = calculateBm25({
-      termFrequency: row.term_frequency,
-      documentFrequency: row.document_frequency,
-      totalDocuments: row.total_documents,
-      documentLength: row.document_length,
-      averageDocumentLength: Number(row.average_document_length)
-    });
+  // 🔹 Total count (based on strict logic)
+const totalResults = await countTotalMatches(
+  queryTerms,
+  usedThreshold
+);
 
-    existing.score += bm25Score;
-    existing.matchedTerms.add(row.term);
-    aggregated.set(row.document_id, existing);
-  }
+  const pageStart = (input.page - 1) * input.limit;
 
-  const scoredResults: SearchResultItem[] = Array.from(aggregated.values()).map(
-    (doc) => {
-      const titleBoost = calculateTitleBoost(
-        doc.title,
-        queryTerms,
-        normalizedQuery
-      );
-
-      const phraseBoost = calculatePhraseBoost(doc.rawContent, normalizedQuery);
-
-      const finalScore = doc.score + titleBoost + phraseBoost;
-
-      return {
-        id: doc.id,
-        title: doc.title,
-        url: doc.url,
-        sourceType: doc.sourceType,
-        score: Number(finalScore.toFixed(4)),
-        matchedTerms: Array.from(doc.matchedTerms),
-        snippet: generateSnippet(doc.rawContent, queryTerms),
-        createdAt: doc.createdAt
-      };
-    }
+  const paginated = matches.slice(
+    pageStart,
+    pageStart + input.limit
   );
 
-  scoredResults.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    if (b.matchedTerms.length !== a.matchedTerms.length) {
-      return b.matchedTerms.length - a.matchedTerms.length;
-    }
-    return b.createdAt.getTime() - a.createdAt.getTime();
-  });
+  const results: SearchResultItem[] = paginated.map((doc) => ({
+    id: doc.document_id,
+    title: doc.title,
+    url: doc.url,
+    sourceType: doc.source_type,
+    score: Number(doc.bm25_score),
+    matchedTerms: queryTerms,
+    snippet: generateSnippet(doc.raw_content, queryTerms),
+    createdAt: doc.created_at
+  }));
 
-  const totalResults = scoredResults.length;
-  const offset = (input.page - 1) * input.limit;
-  const paginated = scoredResults.slice(offset, offset + input.limit);
   const tookMs = Date.now() - startedAt;
 
+  const response: SearchResponse = {
+    query: input.q,
+    normalizedQuery,
+    didYouMean,
+    correctionApplied,
+    cached: false,
+    page: input.page,
+    limit: input.limit,
+    totalResults,
+    returnedResults: results.length,
+    tookMs,
+    results
+  };
+
+  // 🔹 Logging
   await logSearchQuery({
     queryText: input.q,
     normalizedQuery,
@@ -149,16 +165,9 @@ export async function searchDocuments(
     latencyMs: tookMs
   });
 
-  return {
-    query: input.q,
-    normalizedQuery,
-    didYouMean,
-    correctionApplied,
-    page: input.page,
-    limit: input.limit,
-    totalResults,
-    returnedResults: paginated.length,
-    tookMs,
-    results: paginated
-  };
+  // 🔹 Cache
+  const { tookMs: _ignored, ...cacheable } = response;
+  cacheService.set(cacheKey, cacheable, CACHE_CONFIG.SEARCH_TTL_MS);
+
+  return response;
 }

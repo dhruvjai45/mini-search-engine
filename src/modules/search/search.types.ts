@@ -20,6 +20,7 @@ export interface SearchResponse {
   normalizedQuery: string;
   didYouMean: string | null;
   correctionApplied: boolean;
+  cached: boolean;
   page: number;
   limit: number;
   totalResults: number;
