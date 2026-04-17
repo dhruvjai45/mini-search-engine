@@ -2,6 +2,8 @@ import { pool } from '../../config/postgres';
 import { normalizeText } from '../../common/utils/normalizeText';
 import { tokenize } from '../../common/utils/tokenize';
 import { levenshteinDistance } from '../../common/utils/levenshtein';
+import { CACHE_CONFIG, cacheKeys } from '../cache/cacheKeys';
+import { cacheService } from '../cache/cache.service';
 import type { SpellcheckResult, TokenCorrection } from './spellcheck.types';
 
 type DictionaryRow = {
@@ -43,10 +45,7 @@ class SpellcheckService {
 
       const tokens = tokenize(normalized, { removeStopWords: true, minLength: 2 });
       for (const token of tokens) {
-        this.dictionary.set(
-          token,
-          (this.dictionary.get(token) ?? 0) + weight
-        );
+        this.dictionary.set(token, (this.dictionary.get(token) ?? 0) + weight);
       }
     }
   }
@@ -126,7 +125,18 @@ class SpellcheckService {
     };
   }
 
-  suggestQuery(query: string): SpellcheckResult {
+  suggestQuery(query: string, limit = 5): SpellcheckResult {
+    const cacheKey = cacheKeys.spell(normalizeText(query), limit);
+
+    const cached = cacheService.get<Omit<SpellcheckResult, 'cached'>>(cacheKey);
+    if (cached) {
+      return {
+        ...cached,
+        originalQuery: query,
+        cached: true
+      };
+    }
+
     const normalizedTokens = tokenize(query, {
       removeStopWords: true,
       minLength: 2
@@ -136,12 +146,19 @@ class SpellcheckService {
     const correctedQuery = suggestions.map((item) => item.suggestion).join(' ');
     const normalizedQuery = normalizedTokens.join(' ');
 
-    return {
+    const response: Omit<SpellcheckResult, 'cached'> = {
       originalQuery: query,
       normalizedQuery,
       correctedQuery,
       changed: correctedQuery !== normalizedQuery,
       suggestions
+    };
+
+    cacheService.set(cacheKey, response, CACHE_CONFIG.SPELL_TTL_MS);
+
+    return {
+      ...response,
+      cached: false
     };
   }
 }

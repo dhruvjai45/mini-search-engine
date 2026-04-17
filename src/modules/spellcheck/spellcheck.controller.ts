@@ -16,7 +16,7 @@ export async function spellcheckController(
       throw new ValidationError(message);
     }
 
-    const result = spellcheckService.suggestQuery(parsed.data.q);
+    const result = spellcheckService.suggestQuery(parsed.data.q, parsed.data.limit);
 
     return res.status(200).json({
       success: true,

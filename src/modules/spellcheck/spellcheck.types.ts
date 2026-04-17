@@ -11,5 +11,6 @@ export interface SpellcheckResult {
   normalizedQuery: string;
   correctedQuery: string;
   changed: boolean;
+  cached: boolean;
   suggestions: TokenCorrection[];
 }
