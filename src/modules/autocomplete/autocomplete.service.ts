@@ -1,7 +1,22 @@
 import { pool } from '../../config/postgres';
 import { normalizeText } from '../../common/utils/normalizeText';
+import { CACHE_CONFIG, cacheKeys } from '../cache/cacheKeys';
+import { cacheService } from '../cache/cache.service';
 import { AutocompleteTrie } from './trie';
-import type { AutocompleteSuggestion } from './autocomplete.types';
+import type { AutocompleteResponse, AutocompleteSuggestion } from './autocomplete.types';
+
+type TitleRow = {
+  title: string;
+};
+
+type TermRow = {
+  term: string;
+};
+
+type QueryRow = {
+  suggestion: string;
+  frequency: string;
+};
 
 class AutocompleteService {
   private trie = new AutocompleteTrie();
@@ -9,28 +24,27 @@ class AutocompleteService {
 
   async initialize(): Promise<void> {
     if (this.initPromise) return this.initPromise;
-
     this.initPromise = this.loadFromDatabase();
     return this.initPromise;
   }
 
   private async loadFromDatabase(): Promise<void> {
     const [titlesResult, termsResult, queriesResult] = await Promise.all([
-      pool.query<{ title: string }>(
+      pool.query<TitleRow>(
         `
         SELECT title
         FROM documents
         WHERE title IS NOT NULL AND title <> ''
         `
       ),
-      pool.query<{ term: string }>(
+      pool.query<TermRow>(
         `
         SELECT DISTINCT term
         FROM document_terms
         WHERE term IS NOT NULL AND term <> ''
         `
       ),
-      pool.query<{ suggestion: string; frequency: string }>(
+      pool.query<QueryRow>(
         `
         SELECT
           COALESCE(NULLIF(normalized_query, ''), query_text) AS suggestion,
@@ -59,13 +73,38 @@ class AutocompleteService {
   addSuggestion(text: string, weight = 1): void {
     const normalized = normalizeText(text);
     if (!normalized) return;
+
     this.trie.insert(normalized, weight);
   }
 
-  getSuggestions(prefix: string, limit = 10): AutocompleteSuggestion[] {
+  getSuggestions(prefix: string, limit = 10): AutocompleteResponse {
     const normalized = normalizeText(prefix);
-    if (!normalized) return [];
-    return this.trie.getSuggestions(normalized, limit);
+    const cacheKey = cacheKeys.suggest(normalized, limit);
+
+    const cached = cacheService.get<Omit<AutocompleteResponse, 'cached'>>(cacheKey);
+    if (cached) {
+      return {
+        ...cached,
+        query: normalized,
+        limit,
+        cached: true
+      };
+    }
+
+    const suggestions = this.trie.getSuggestions(normalized, limit);
+
+    const response: Omit<AutocompleteResponse, 'cached'> = {
+      query: normalized,
+      limit,
+      suggestions
+    };
+
+    cacheService.set(cacheKey, response, CACHE_CONFIG.SUGGEST_TTL_MS);
+
+    return {
+      ...response,
+      cached: false
+    };
   }
 }
 

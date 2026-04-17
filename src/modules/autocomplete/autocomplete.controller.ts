@@ -16,7 +16,7 @@ export async function autocompleteController(
       throw new ValidationError(message);
     }
 
-    const suggestions = autocompleteService.getSuggestions(
+    const result = autocompleteService.getSuggestions(
       parsed.data.q,
       parsed.data.limit
     );
@@ -24,11 +24,7 @@ export async function autocompleteController(
     return res.status(200).json({
       success: true,
       message: 'Suggestions fetched successfully',
-      data: {
-        query: parsed.data.q,
-        limit: parsed.data.limit,
-        suggestions
-      }
+      data: result
     });
   } catch (error) {
     next(error);
