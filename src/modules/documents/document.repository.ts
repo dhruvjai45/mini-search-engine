@@ -12,6 +12,7 @@ type DocumentDbRow = {
   clean_content: string;
   content_hash: string;
   source_type: 'manual' | 'crawl';
+  document_length: number;
   created_at: Date;
   updated_at: Date;
 };
@@ -25,6 +26,7 @@ function mapRow(row: DocumentDbRow): DocumentRecord {
     cleanContent: row.clean_content,
     contentHash: row.content_hash,
     sourceType: row.source_type,
+    documentLength: row.document_length,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -43,10 +45,11 @@ export async function findDocumentByContentHash(
       clean_content,
       content_hash,
       source_type,
+      document_length,
       created_at,
       updated_at
     FROM documents
-    WHERE content_hash = $1
+    WHERE content_hash = $1::text
     LIMIT 1
     `,
     [contentHash]
@@ -69,10 +72,11 @@ export async function findDocumentByUrl(
       clean_content,
       content_hash,
       source_type,
+      document_length,
       created_at,
       updated_at
     FROM documents
-    WHERE url = $1
+    WHERE url = $1::text
     LIMIT 1
     `,
     [url]
@@ -84,7 +88,11 @@ export async function findDocumentByUrl(
 
 export async function createDocument(
   executor: QueryExecutor,
-  data: CreateDocumentInput & { cleanContent: string; contentHash: string }
+  data: CreateDocumentInput & {
+    cleanContent: string;
+    contentHash: string;
+    documentLength: number;
+  }
 ): Promise<DocumentRecord> {
   const result = await executor.query<DocumentDbRow>(
     `
@@ -94,9 +102,18 @@ export async function createDocument(
       raw_content,
       clean_content,
       content_hash,
-      source_type
+      source_type,
+      document_length
     )
-    VALUES ($1, $2, $3, $4, $5, $6)
+    VALUES (
+  $1::text,
+  $2::text,
+  $3::text,
+  $4::text,
+  $5::text,
+  $6::text,
+  $7::int
+)
     RETURNING
       id,
       title,
@@ -105,6 +122,7 @@ export async function createDocument(
       clean_content,
       content_hash,
       source_type,
+      document_length,
       created_at,
       updated_at
     `,
@@ -114,7 +132,8 @@ export async function createDocument(
       data.content,
       data.cleanContent,
       data.contentHash,
-      data.sourceType ?? 'manual'
+      data.sourceType ?? 'manual',
+      data.documentLength
     ]
   );
 

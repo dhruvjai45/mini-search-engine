@@ -15,6 +15,7 @@ export interface DocumentRecord {
   cleanContent: string;
   contentHash: string;
   sourceType: DocumentSourceType;
+  documentLength: number;
   createdAt: Date;
   updatedAt: Date;
 }

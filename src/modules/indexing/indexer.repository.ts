@@ -10,11 +10,19 @@ export async function insertDocumentTerms(
   if (postings.length === 0) return;
 
   const values: unknown[] = [];
+
   const placeholders = postings
     .map((posting, index) => {
       const base = index * 4;
-      values.push(documentId, posting.term, posting.termFrequency, posting.positions);
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+
+      values.push(
+        documentId,
+        posting.term,
+        posting.termFrequency,
+        posting.positions
+      );
+
+      return `($${base + 1}::uuid, $${base + 2}::text, $${base + 3}::int, $${base + 4}::int[])`;
     })
     .join(', ');
 
@@ -56,7 +64,7 @@ export async function getDocumentTermsByDocumentId(documentId: string) {
       positions,
       created_at
     FROM document_terms
-    WHERE document_id = $1
+    WHERE document_id = $1::uuid
     ORDER BY term ASC
     `,
     [documentId]
