@@ -77,10 +77,14 @@ let matches = await findSearchTermMatches(
     const correction = spellcheckService.suggestQuery(input.q, 5);
 
     if (correction.changed && correction.correctedQuery !== normalizedQuery) {
-      const correctedTerms = tokenize(correction.correctedQuery, {
-        removeStopWords: true,
-        minLength: 2
-      });
+      const correctedTerms = Array.from(
+        new Set(
+          tokenize(correction.correctedQuery, {
+            removeStopWords: true,
+            minLength: 2
+          })
+        )
+      );
 
       if (correctedTerms.length > 0) {
         const correctedThreshold =
@@ -99,6 +103,7 @@ let matches = await findSearchTermMatches(
           matches = correctedMatches;
           queryTerms = correctedTerms;
           normalizedQuery = correction.correctedQuery;
+          usedThreshold = correctedThreshold;
           correctionApplied = true;
         }
       }

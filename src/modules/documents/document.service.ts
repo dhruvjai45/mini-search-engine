@@ -66,6 +66,9 @@ export async function ingestDocument(
     await client.query('COMMIT');
 
     autocompleteService.addSuggestion(saved.title, 3);
+    for (const term of new Set(tokens)) {
+      autocompleteService.addSuggestion(term, 1);
+    }
     spellcheckService.addTerms(titleTokens, 2);
     spellcheckService.addTerms(tokens, 1);
 
