@@ -8,6 +8,7 @@
     "ingest:rss": "tsx scripts/ingest-rss.ts",
     "ingest:all": "tsx scripts/ingest-real-data.ts",
     "dev": "tsx watch src/main.ts",
+    "reindex:missing": "tsx scripts/reindex-missing-documents.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test": "jest"

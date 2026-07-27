@@ -6,4 +6,10 @@ export const searchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10)
 });
 
+export const clickSchema = z.object({
+  documentId: z.uuid({ error: 'documentId must be a valid UUID' }),
+  query: z.string().trim().min(1, 'query is required').max(200)
+});
+
 export type SearchQueryInput = z.infer<typeof searchQuerySchema>;
+export type ClickInput = z.infer<typeof clickSchema>;

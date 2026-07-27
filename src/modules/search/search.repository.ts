@@ -22,7 +22,7 @@ WITH candidate_docs AS (
   GROUP BY dt.document_id
   HAVING COUNT(DISTINCT dt.term) >= $2::int
   ORDER BY matched_term_count DESC
-  LIMIT 100
+  LIMIT GREATEST($3::int * 5, 200)
 ),
 corpus AS (
   SELECT total_documents, average_document_length
