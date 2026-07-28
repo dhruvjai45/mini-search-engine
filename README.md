@@ -1,7 +1,5 @@
 # Mini Search Engine
 
-# Mini Search Engine
-
 Mini Search Engine is a backend-focused search platform built with Node.js, Express, TypeScript, and PostgreSQL. It is designed to demonstrate how a production-style search system works under the hood: document ingestion, tokenization, inverted indexing, ranking, autocomplete, spellcheck, caching, query logging, and click tracking.
 
 ---
