@@ -33,7 +33,6 @@ export async function upsertTermStats(
 ): Promise<void> {
   if (postings.length === 0) return;
 
-  // 🔴 CRITICAL: sort terms to ensure consistent lock order
   postings.sort((a, b) => a.term.localeCompare(b.term));
 
   const values: unknown[] = [];

@@ -8,12 +8,12 @@ const STOP_WORDS = new Set([
   'no','nor','not','only','own','same','so','than','too','very',
   'can','will','just','should','now',
 
-  // verbs (VERY IMPORTANT)
+  // verbs
   'is','are','was','were','be','been','being',
   'do','does','did','doing',
   'have','has','had','having',
 
-  // pronouns (useless for search)
+  // pronouns
   'i','you','he','she','it','we','they',
   'me','him','her','them','us',
 
@@ -21,7 +21,6 @@ const STOP_WORDS = new Set([
   'this','that','these','those',
   'as','because','while','where','which','who','whom',
 
-  // YOUR missing ones (critical)
   'uses','use','using','used',
   'make','makes','made',
   'get','gets','got',
